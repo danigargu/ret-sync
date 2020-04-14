@@ -1915,6 +1915,38 @@ Exit:
 
 HRESULT
 CALLBACK
+rbase(PDEBUG_CLIENT4 Client, PCSTR Args)
+{
+    HRESULT hRes;
+    ULONG64 Base;
+
+    INIT_API();
+
+    if (!Args || !*Args)
+    {
+        dprintf("[sync] !rbase <module>\n");
+        return E_FAIL;
+    }
+
+    hRes = g_ExtSymbols->GetModuleByModuleName(Args, 0, NULL, &Base);
+    if (FAILED(hRes))
+    {
+        dprintf("[sync] rbase: failed to find module %s by its name\n", Args);
+        return E_FAIL;
+    }
+
+    hRes = TunnelSend("[sync]{\"type\":\"rbase\",\"base\":\"0x%I64x\"}\n", Base);
+    if (FAILED(hRes))
+    {
+        dprintf("[sync] rbase send failed\n");
+        return E_FAIL;
+    }
+    dprintf(" > current remote base set to 0x%I64x (%s)\n", Base, Args);
+    return hRes;
+}
+
+HRESULT
+CALLBACK
 translate(PDEBUG_CLIENT4 Client, PCSTR Args)
 {
     HRESULT hRes;
@@ -2032,7 +2064,8 @@ synchelp(PDEBUG_CLIENT4 Client, PCSTR Args)
         " > !modunmap <base>               = unmap a synthetic module at base address\n"
         " > !bpcmds <||save|load|>         = .bpcmds wrapper, save and reload .bpcmds output to current idb\n"
         " > !ks                            = wrapper for kv command using DML\n"
-        " > !translate <base> <addr> <mod> = rebase an address with respect to local module's base\n\n");
+        " > !translate <base> <addr> <mod> = rebase an address with respect to local module's base\n"
+        " > !rbase <module>                = set remote base address by given module name\n\n");
 
     return hRes;
 }

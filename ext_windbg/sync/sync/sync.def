@@ -46,3 +46,4 @@ EXPORTS
     bpcmds
     ks
     translate
+    rbase

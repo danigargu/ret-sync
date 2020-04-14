@@ -167,6 +167,14 @@ class RequestHandler(object):
 
     # rebase address with respect to remote image base
     def rebase_remote(self, offset):
+        if self.base_remote is None:
+            answer = idaapi.ask_yn(idaapi.ASKBTN_YES, 
+                "HIDECANCEL\nRemote module base is not yet resolved. Do you want to request it?\n")
+
+            if answer == idaapi.ASKBTN_YES:
+                self.remote_base_noticie()
+            return None
+
         if not (self.base == self.base_remote):
             offset = (offset - self.base) + self.base_remote
 
@@ -298,7 +306,8 @@ class RequestHandler(object):
     def req_cursor(self, hash):
         rs_log('request IDA Pro cursor position')
         addr = self.rebase_remote(idc.get_screen_ea())
-        self.notice_broker('cmd', "\"cmd\":\"0x%x\"" % addr)
+        if addr is not None:
+            self.notice_broker('cmd', "\"cmd\":\"0x%x\"" % addr)
         return
 
     # patch memory at specified address using info from debugger
@@ -512,6 +521,11 @@ class RequestHandler(object):
         else:
             SyncForm.uninit_hotkeys()
 
+    def req_rbase(self, hash):
+        base = hash['base']
+        self.base_remote = int(base, 16)
+        rs_log("set current remote base to %#x" % self.base_remote)
+
     # request from broker
     def req_broker(self, hash):
         subtype = hash['subtype']
@@ -624,13 +638,14 @@ class RequestHandler(object):
 
         ea = idaapi.get_screen_ea()
         offset = self.rebase_remote(ea)
-        cmd = "%s0x%x" % (self.dbg_dialect['bp1' if oneshot else 'bp'], offset)
+        if offset is not None:
+            cmd = "%s0x%x" % (self.dbg_dialect['bp1' if oneshot else 'bp'], offset)
 
-        if (oneshot and 'oneshot_post' in self.dbg_dialect):
-            cmd += self.dbg_dialect['oneshot_post']
+            if (oneshot and 'oneshot_post' in self.dbg_dialect):
+                cmd += self.dbg_dialect['oneshot_post']
 
-        self.notice_broker("cmd", "\"cmd\":\"%s\"" % cmd)
-        rs_log(">> set %s" % cmd)
+            self.notice_broker("cmd", "\"cmd\":\"%s\"" % cmd)
+            rs_log(">> set %s" % cmd)
 
     # send a hardware bp command (Ctrl-F2) to the debugger (via the broker and dispatcher)
     def hbp_notice(self, oneshot=False):
@@ -640,10 +655,11 @@ class RequestHandler(object):
 
         ea = idaapi.get_screen_ea()
         offset = self.rebase_remote(ea)
-        cmd = "%s0x%x" % (self.dbg_dialect['hbp1' if oneshot else 'hbp'], offset)
+        if offset is not None:
+            cmd = "%s0x%x" % (self.dbg_dialect['hbp1' if oneshot else 'hbp'], offset)
 
-        self.notice_broker("cmd", "\"cmd\":\"%s\"" % cmd)
-        rs_log(">> set %s" % cmd)
+            self.notice_broker("cmd", "\"cmd\":\"%s\"" % cmd)
+            rs_log(">> set %s" % cmd)
 
     # send a oneshot bp command (F3) to the debugger (via the broker and dispatcher)
     def bp_oneshot_notice(self):
@@ -693,6 +709,17 @@ class RequestHandler(object):
 
         self.notice_broker("cmd", "\"cmd\":\"%s\"" % cmd)
         rs_log("translate address 0x%x" % ea)
+
+    def remote_base_noticie(self):
+        if not self.dbg_dialect:
+            rs_log("idb isn't synced yet, can't translate")
+            return
+
+        mod = self.name.split('.')[0].strip()
+        cmd = self.dbg_dialect['prefix'] + "rbase %s" % (mod)
+        self.notice_broker("cmd", "\"cmd\":\"%s\"" % cmd)
+        rs_log("rbase %s" % mod)
+
 
     # send a go command (Alt-F5) to the debugger (via the broker and dispatcher)
     def go_notice(self):
@@ -777,7 +804,8 @@ class RequestHandler(object):
             'bps_get': self.req_bps_get,
             'bps_set': self.req_bps_set,
             'modcheck': self.req_modcheck,
-            'dialect': self.req_set_dbg_dialect
+            'dialect': self.req_set_dbg_dialect,
+            'rbase': self.req_rbase,
         }
         self.prev_req = ""  # used as a cache if json is not completely received
 
